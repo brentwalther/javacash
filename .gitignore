@@ -1,0 +1,4 @@
+# Basic gitignore for intellij. Save no project config or output dir.
+.idea/**
+*.iml
+target/**
