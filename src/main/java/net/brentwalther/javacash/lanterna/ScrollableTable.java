@@ -1,19 +1,30 @@
 package net.brentwalther.javacash.lanterna;
 
+import com.googlecode.lanterna.gui2.ScrollBar;
+import com.googlecode.lanterna.gui2.TextGUIGraphics;
 import com.googlecode.lanterna.gui2.table.Table;
 import com.googlecode.lanterna.gui2.table.TableModel;
 import com.googlecode.lanterna.input.KeyStroke;
 
 public class ScrollableTable extends Table<String> {
 
-  public ScrollableTable() {
+  private final ScrollBar scrollBar;
+
+  public ScrollableTable(ScrollBar scrollBar) {
     super("");
+    this.scrollBar = scrollBar;
   }
 
   @Override
   public synchronized Table<String> setTableModel(TableModel<String> tableModel) {
     setViewTopRow(0);
     return super.setTableModel(tableModel);
+  }
+
+  @Override
+  protected void onAfterDrawing(TextGUIGraphics graphics) {
+    super.onAfterDrawing(graphics);
+    updateScrollBar();
   }
 
   @Override
@@ -43,5 +54,11 @@ public class ScrollableTable extends Table<String> {
     int newCurrentRow = Math.min(Math.max(0, currentRow + delta), lastRowIndex - 1);
     setViewTopRow(rowOffset);
     setSelectedRow(newCurrentRow);
+  }
+
+  private void updateScrollBar() {
+    this.scrollBar.setScrollMaximum(getTableModel().getRowCount());
+    this.scrollBar.setScrollPosition(getViewTopRow());
+    this.scrollBar.setViewSize(getSize().getRows());
   }
 }

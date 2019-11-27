@@ -3,9 +3,12 @@ package net.brentwalther.javacash.lanterna;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.googlecode.lanterna.gui2.Border;
+import com.googlecode.lanterna.gui2.BorderLayout;
 import com.googlecode.lanterna.gui2.Borders;
 import com.googlecode.lanterna.gui2.Component;
+import com.googlecode.lanterna.gui2.Direction;
 import com.googlecode.lanterna.gui2.Panel;
+import com.googlecode.lanterna.gui2.ScrollBar;
 import com.googlecode.lanterna.gui2.table.Table;
 import com.googlecode.lanterna.gui2.table.TableModel;
 import net.brentwalther.javacash.model.Transaction;
@@ -24,12 +27,15 @@ public class TransactionTable implements Supplier<Component> {
   }
 
   public static TransactionTable create() {
-    Panel contentPanel = new Panel();
-    Table<String> table = new ScrollableTable();
+    Panel contentPanel = new Panel(new BorderLayout());
 
+    ScrollBar scrollBar = new ScrollBar(Direction.VERTICAL);
+    Table<String> table = new ScrollableTable(scrollBar);
     table.setCellSelection(true);
     table.setTableModel(new TableModel<>());
-    contentPanel.addComponent(table);
+
+    contentPanel.addComponent(table, BorderLayout.Location.CENTER);
+    contentPanel.addComponent(scrollBar, BorderLayout.Location.RIGHT);
 
     Border container = Borders.singleLine("Transactions");
     container.setComponent(contentPanel);
