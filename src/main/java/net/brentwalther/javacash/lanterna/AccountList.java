@@ -1,6 +1,7 @@
 package net.brentwalther.javacash.lanterna;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Ordering;
@@ -15,6 +16,7 @@ import com.googlecode.lanterna.gui2.Panel;
 import net.brentwalther.javacash.model.Account;
 import net.brentwalther.javacash.util.StringUtil;
 
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -31,7 +33,7 @@ public class AccountList implements Supplier<Component> {
   private final Consumer<Account> onAccountSelected;
   private final Set<Account> expandedAccounts = new HashSet<>();
   private Account lastSelectedAccount = Account.NONE;
-  private UIState uiState = new UIState(Account.NONE, ImmutableMultimap.of());
+  private UIState uiState = new UIState(Account.NONE, ImmutableMultimap.of(), ImmutableMap.of());
 
   public AccountList(
       Container container, ActionListBox accountList, Consumer<Account> onAccountSelected) {
@@ -70,7 +72,12 @@ public class AccountList implements Supplier<Component> {
     String prefix =
         StringUtil.repeatString(" ", depth)
             + (hasChildren ? (isExpanded ? BOTTOM_ARROW : RIGHT_ARROW) : " ");
-    accountList.addItem(prefix + account.getName(), () -> onAccountSelected(account));
+    String suffix =
+        uiState.accountBalances.containsKey(account.getId())
+            ? " (" + uiState.accountBalances.get(account.getId()) + ")"
+            : "";
+    String label = prefix + account.getName() + suffix;
+    accountList.addItem(label, () -> onAccountSelected(account));
     if (account == lastSelectedAccount) {
       accountList.setSelectedIndex(accountList.getItems().size() - 1);
     }
@@ -105,10 +112,15 @@ public class AccountList implements Supplier<Component> {
 
     private final Account rootAccount;
     private final ImmutableMultimap<String, Account> childrenByParentId;
+    private final ImmutableMap<String, BigDecimal> accountBalances;
 
-    public UIState(Account rootAccount, ImmutableMultimap<String, Account> childrenByParentId) {
+    public UIState(
+        Account rootAccount,
+        ImmutableMultimap<String, Account> childrenByParentId,
+        ImmutableMap<String, BigDecimal> accountBalances) {
       this.rootAccount = rootAccount;
       this.childrenByParentId = childrenByParentId;
+      this.accountBalances = accountBalances;
     }
   }
 }

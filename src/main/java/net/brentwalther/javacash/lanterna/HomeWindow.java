@@ -1,6 +1,7 @@
 package net.brentwalther.javacash.lanterna;
 
 import com.google.common.collect.FluentIterable;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimaps;
@@ -13,6 +14,9 @@ import io.reactivex.rxjava3.subjects.ReplaySubject;
 import net.brentwalther.javacash.model.Account;
 import net.brentwalther.javacash.model.JavaCashModel;
 import net.brentwalther.javacash.model.Transaction;
+
+import java.math.BigDecimal;
+import java.util.HashMap;
 
 public class HomeWindow extends AbstractWindow {
 
@@ -30,9 +34,29 @@ public class HomeWindow extends AbstractWindow {
     AccountList accountList = AccountList.create(selectedAccountSubject::onNext);
     modelObservable
         .map(
-            model ->
-                new AccountList.UIState(
-                    rootAccount, Multimaps.index(model.getAccounts(), Account::getParentAccountId)))
+            model -> {
+              ImmutableMap<String, BigDecimal> accountBalances =
+                  ImmutableMap.copyOf(
+                      model.getTransactions().stream()
+                          .flatMap(t -> t.getSplitList().stream())
+                          .collect(
+                              () -> new HashMap<>(),
+                              (map, split) ->
+                                  map.put(
+                                      split.getAccountId(),
+                                      map.getOrDefault(split.getAccountId(), BigDecimal.ZERO)
+                                          .add(split.getAmount())),
+                              (map1, map2) -> {
+                                for (String accountId : map1.keySet()) {
+                                  map2.put(
+                                      accountId, map2.getOrDefault(accountId, BigDecimal.ZERO));
+                                }
+                              }));
+              return new AccountList.UIState(
+                  rootAccount,
+                  Multimaps.index(model.getAccounts(), Account::getParentAccountId),
+                  accountBalances);
+            })
         .subscribe(accountList::setUiState);
 
     TransactionTable transactions = TransactionTable.create();
