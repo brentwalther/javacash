@@ -3,6 +3,7 @@ package net.brentwalther.javacash.lanterna;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Multimaps;
 import com.google.common.collect.Ordering;
 import com.googlecode.lanterna.gui2.AbstractWindow;
 import com.googlecode.lanterna.gui2.BorderLayout;
@@ -27,23 +28,11 @@ public class HomeWindow extends AbstractWindow {
     selectedAccountSubject.onNext(rootAccount);
 
     AccountList accountList = AccountList.create(selectedAccountSubject::onNext);
-    Observable.combineLatest(
-            modelObservable,
-            selectedAccountSubject,
-            (model, selectedAccount) -> {
-              Iterable<Account> accounts = model.getAccounts();
-
-              return new AccountList.UIState(
-                  /* grandParent= */ FluentIterable.from(accounts)
-                      .firstMatch(
-                          (account) -> account.getId().equals(selectedAccount.getParentAccountId()))
-                      .or(Account.NONE),
-                  /* parent= */ selectedAccount,
-                  FluentIterable.from(accounts)
-                      .filter(
-                          account -> account.getParentAccountId().equals(selectedAccount.getId()))
-                      .toSortedList(Ordering.natural().onResultOf(Account::getName)));
-            })
+    modelObservable
+        .map(
+            model ->
+                new AccountList.UIState(
+                    rootAccount, Multimaps.index(model.getAccounts(), Account::getParentAccountId)))
         .subscribe(accountList::setUiState);
 
     TransactionTable transactions = TransactionTable.create();
