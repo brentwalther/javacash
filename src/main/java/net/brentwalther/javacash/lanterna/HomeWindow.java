@@ -3,7 +3,7 @@ package net.brentwalther.javacash.lanterna;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimaps;
 import com.google.common.collect.Ordering;
 import com.googlecode.lanterna.gui2.AbstractWindow;
@@ -65,12 +65,16 @@ public class HomeWindow extends AbstractWindow {
             selectedAccountSubject,
             (model, selectedAccount) -> {
               return new TransactionTable.UiState(
+                  selectedAccount,
+                  ImmutableMap.copyOf(
+                      FluentIterable.from(model.getAccounts()).transform(account -> Maps.immutableEntry(account.getId(), account.getName()))),
                   FluentIterable.from(model.getTransactions())
                       .filter(
-                          (transaction) ->
-                              Iterables.any(
-                                  transaction.getSplitList(),
-                                  (split) -> split.getAccountId().equals(selectedAccount.getId())))
+                          transaction ->
+                              transaction.getSplitList().stream()
+                                  .anyMatch(
+                                      split ->
+                                          split.getAccountId().equals(selectedAccount.getId())))
                       .toSortedList(Ordering.natural().onResultOf(Transaction::getPostDate)));
             })
         .subscribe(transactions::setUiState);

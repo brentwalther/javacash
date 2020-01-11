@@ -2,6 +2,7 @@ package net.brentwalther.javacash.lanterna;
 
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.googlecode.lanterna.gui2.Border;
 import com.googlecode.lanterna.gui2.BorderLayout;
 import com.googlecode.lanterna.gui2.Borders;
@@ -11,8 +12,11 @@ import com.googlecode.lanterna.gui2.Panel;
 import com.googlecode.lanterna.gui2.ScrollBar;
 import com.googlecode.lanterna.gui2.table.Table;
 import com.googlecode.lanterna.gui2.table.TableModel;
+import net.brentwalther.javacash.model.Account;
+import net.brentwalther.javacash.model.Split;
 import net.brentwalther.javacash.model.Transaction;
 
+import java.math.BigDecimal;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.function.Supplier;
@@ -46,15 +50,27 @@ public class TransactionTable implements Supplier<Component> {
     String[] columnHeaders =
         FluentIterable.from(newState.columns).transform(Column::toString).toArray(String.class);
     TableModel<String> tableModel = new TableModel<>(columnHeaders);
+    BigDecimal cumulativeAmount = BigDecimal.ZERO;
     for (Transaction transaction : newState.transactions) {
-      tableModel.addRow(
-          ImmutableList.of(
-              transaction
-                  .getPostDate()
-                  .atZone(ZoneId.systemDefault())
-                  .format(DateTimeFormatter.ISO_LOCAL_DATE),
-              transaction.getDescription(),
-              transaction.getSplitList().get(0).getAmount().toString()));
+      for (Split split : transaction.getSplitList()) {
+        if (split.getAccountId().equals(newState.account.getId())) {
+          // Don't show the portion of the split for this account. We're interested
+          // in seeing where it came from.
+          continue;
+        }
+        BigDecimal amount = split.getAmount().negate();
+        cumulativeAmount = cumulativeAmount.add(amount);
+        tableModel.addRow(
+            ImmutableList.of(
+                transaction
+                    .getPostDate()
+                    .atZone(ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ISO_LOCAL_DATE),
+                transaction.getDescription(),
+                newState.accountNamesById.get(split.getAccountId()),
+                amount.toString(),
+                cumulativeAmount.toString()));
+      }
     }
     this.table.setTableModel(tableModel);
   }
@@ -67,14 +83,23 @@ public class TransactionTable implements Supplier<Component> {
   public enum Column {
     DATE,
     DESCRIPTION,
-    AMOUNT
+    ACCOUNT,
+    AMOUNT,
+    BALANCE
   }
 
   public static class UiState {
     private final ImmutableList<Column> columns = ImmutableList.copyOf(Column.values());
-    private final Iterable<Transaction> transactions;
+    private final Account account;
+    private final ImmutableMap<String, String> accountNamesById;
+    private final ImmutableList<Transaction> transactions;
 
-    public UiState(Iterable<Transaction> transactions) {
+    public UiState(
+        Account account,
+        ImmutableMap<String, String> accountNamesById,
+        ImmutableList<Transaction> transactions) {
+      this.account = account;
+      this.accountNamesById = accountNamesById;
       this.transactions = transactions;
     }
   }
