@@ -13,21 +13,25 @@ import com.googlecode.lanterna.gui2.Container;
 import com.googlecode.lanterna.gui2.Direction;
 import com.googlecode.lanterna.gui2.LinearLayout;
 import com.googlecode.lanterna.gui2.Panel;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.subjects.ReplaySubject;
+import io.reactivex.rxjava3.subjects.Subject;
 import net.brentwalther.javacash.model.Account;
 import net.brentwalther.javacash.util.StringUtil;
 
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
-public class AccountList implements Supplier<Component> {
+public class AccountList implements OptionalComponent {
 
   private static final String RIGHT_ARROW = "\u2192";
   private static final String BOTTOM_ARROW = "\u2193";
 
+  private final Subject<Optional<Component>> componentObservable = ReplaySubject.createWithSize(1);
   private final Container container;
   private final ActionListBox accountList;
   private final Consumer<Account> onAccountSelected;
@@ -40,9 +44,11 @@ public class AccountList implements Supplier<Component> {
     this.container = container;
     this.accountList = accountList;
     this.onAccountSelected = onAccountSelected;
+    componentObservable.onNext(Optional.empty());
   }
 
-  public static AccountList create(Consumer<Account> onAccountSelectedConsumer) {
+  public static Observable<Optional<Component>> create(
+      Observable<UIState> uiStateObservable, Consumer<Account> onAccountSelectedConsumer) {
     Border container = Borders.singleLine("Accounts");
     ActionListBox accountsList = new ActionListBox();
 
@@ -50,15 +56,27 @@ public class AccountList implements Supplier<Component> {
     contentPanel.addComponent(accountsList);
 
     container.setComponent(contentPanel);
-    return new AccountList(container, accountsList, onAccountSelectedConsumer);
+    AccountList accountList = new AccountList(container, accountsList, onAccountSelectedConsumer);
+    uiStateObservable.subscribe(accountList::setUiState);
+    return accountList.observable();
   }
 
-  public void setUiState(UIState state) {
+  @Override
+  public Observable<Optional<Component>> observable() {
+    return componentObservable;
+  }
+
+  private void setUiState(UIState state) {
     this.uiState = state;
     redraw();
+    if (accountList.getItemCount() == 0) {
+      componentObservable.onNext(Optional.empty());
+    } else {
+      componentObservable.onNext(Optional.of(container));
+    }
   }
 
-  public void redraw() {
+  private void redraw() {
     this.accountList.clearItems();
     for (Account topLevelAccount : uiState.childrenByParentId.get(uiState.rootAccount.getId())) {
       preOrderTraversal(0, topLevelAccount, uiState.childrenByParentId);
@@ -101,11 +119,6 @@ public class AccountList implements Supplier<Component> {
     lastSelectedAccount = account;
     redraw();
     onAccountSelected.accept(account);
-  }
-
-  @Override
-  public Component get() {
-    return this.container;
   }
 
   public static class UIState {

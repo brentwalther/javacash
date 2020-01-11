@@ -12,6 +12,9 @@ import com.googlecode.lanterna.gui2.Panel;
 import com.googlecode.lanterna.gui2.ScrollBar;
 import com.googlecode.lanterna.gui2.table.Table;
 import com.googlecode.lanterna.gui2.table.TableModel;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.subjects.ReplaySubject;
+import io.reactivex.rxjava3.subjects.Subject;
 import net.brentwalther.javacash.model.Account;
 import net.brentwalther.javacash.model.Split;
 import net.brentwalther.javacash.model.Transaction;
@@ -19,18 +22,20 @@ import net.brentwalther.javacash.model.Transaction;
 import java.math.BigDecimal;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.function.Supplier;
+import java.util.Optional;
 
-public class TransactionTable implements Supplier<Component> {
+public class TransactionTable implements OptionalComponent {
+  private final Subject<Optional<Component>> componentObservable = ReplaySubject.createWithSize(1);
   private final Component container;
   private final Table<String> table;
 
   private TransactionTable(Component container, Table<String> table) {
     this.container = container;
     this.table = table;
+    componentObservable.onNext(Optional.empty());
   }
 
-  public static TransactionTable create() {
+  public static Observable<Optional<Component>> create(Observable<UIState> uiStateObservable) {
     Panel contentPanel = new Panel(new BorderLayout());
 
     ScrollBar scrollBar = new ScrollBar(Direction.VERTICAL);
@@ -43,10 +48,17 @@ public class TransactionTable implements Supplier<Component> {
 
     Border container = Borders.singleLine("Transactions");
     container.setComponent(contentPanel);
-    return new TransactionTable(container, table);
+    TransactionTable transactionTable = new TransactionTable(container, table);
+    uiStateObservable.subscribe(transactionTable::setUiState);
+    return transactionTable.observable();
   }
 
-  public void setUiState(UiState newState) {
+  @Override
+  public Observable<Optional<Component>> observable() {
+    return componentObservable;
+  }
+
+  private void setUiState(UIState newState) {
     String[] columnHeaders =
         FluentIterable.from(newState.columns).transform(Column::toString).toArray(String.class);
     TableModel<String> tableModel = new TableModel<>(columnHeaders);
@@ -73,11 +85,11 @@ public class TransactionTable implements Supplier<Component> {
       }
     }
     this.table.setTableModel(tableModel);
-  }
-
-  @Override
-  public Component get() {
-    return this.container;
+    if (tableModel.getRowCount() == 0) {
+      componentObservable.onNext(Optional.empty());
+    } else {
+      componentObservable.onNext(Optional.of(container));
+    }
   }
 
   public enum Column {
@@ -88,13 +100,13 @@ public class TransactionTable implements Supplier<Component> {
     BALANCE
   }
 
-  public static class UiState {
+  public static class UIState {
     private final ImmutableList<Column> columns = ImmutableList.copyOf(Column.values());
     private final Account account;
     private final ImmutableMap<String, String> accountNamesById;
     private final ImmutableList<Transaction> transactions;
 
-    public UiState(
+    public UIState(
         Account account,
         ImmutableMap<String, String> accountNamesById,
         ImmutableList<Transaction> transactions) {

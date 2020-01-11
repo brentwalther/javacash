@@ -8,15 +8,18 @@ import com.google.common.collect.Multimaps;
 import com.google.common.collect.Ordering;
 import com.googlecode.lanterna.gui2.AbstractWindow;
 import com.googlecode.lanterna.gui2.BorderLayout;
+import com.googlecode.lanterna.gui2.Component;
 import com.googlecode.lanterna.gui2.Panel;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.subjects.ReplaySubject;
+import io.reactivex.rxjava3.subjects.Subject;
 import net.brentwalther.javacash.model.Account;
 import net.brentwalther.javacash.model.JavaCashModel;
 import net.brentwalther.javacash.model.Transaction;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.Optional;
 
 public class HomeWindow extends AbstractWindow {
 
@@ -28,10 +31,12 @@ public class HomeWindow extends AbstractWindow {
     HomeWindow window = new HomeWindow();
     window.setHints(ImmutableSet.of(Hint.FIT_TERMINAL_WINDOW));
 
-    ReplaySubject<Account> selectedAccountSubject = ReplaySubject.createWithSize(1);
-    selectedAccountSubject.onNext(rootAccount);
+    Subject<Account> selectedAccount = ReplaySubject.createWithSize(1);
+    selectedAccount.onNext(rootAccount);
 
-    AccountList accountList = AccountList.create(selectedAccountSubject::onNext);
+    Subject<AccountList.UIState> accountListUiState = ReplaySubject.createWithSize(1);
+    Observable<Optional<Component>> accountList =
+        AccountList.create(accountListUiState, selectedAccount::onNext);
     modelObservable
         .map(
             model -> {
@@ -57,32 +62,46 @@ public class HomeWindow extends AbstractWindow {
                   Multimaps.index(model.getAccounts(), Account::getParentAccountId),
                   accountBalances);
             })
-        .subscribe(accountList::setUiState);
+        .subscribe(accountListUiState::onNext);
 
-    TransactionTable transactions = TransactionTable.create();
+    Subject<TransactionTable.UIState> tableUiState = ReplaySubject.createWithSize(1);
+    Observable<Optional<Component>> transactionTable = TransactionTable.create(tableUiState);
     Observable.combineLatest(
             modelObservable,
-            selectedAccountSubject,
-            (model, selectedAccount) -> {
-              return new TransactionTable.UiState(
-                  selectedAccount,
-                  ImmutableMap.copyOf(
-                      FluentIterable.from(model.getAccounts()).transform(account -> Maps.immutableEntry(account.getId(), account.getName()))),
-                  FluentIterable.from(model.getTransactions())
-                      .filter(
-                          transaction ->
-                              transaction.getSplitList().stream()
-                                  .anyMatch(
-                                      split ->
-                                          split.getAccountId().equals(selectedAccount.getId())))
-                      .toSortedList(Ordering.natural().onResultOf(Transaction::getPostDate)));
-            })
-        .subscribe(transactions::setUiState);
+            selectedAccount,
+            (model, latestSelectedAccount) ->
+                new TransactionTable.UIState(
+                    latestSelectedAccount,
+                    ImmutableMap.copyOf(
+                        FluentIterable.from(model.getAccounts())
+                            .transform(
+                                account ->
+                                    Maps.immutableEntry(account.getId(), account.getName()))),
+                    FluentIterable.from(model.getTransactions())
+                        .filter(
+                            transaction ->
+                                transaction.getSplitList().stream()
+                                    .anyMatch(
+                                        split ->
+                                            split
+                                                .getAccountId()
+                                                .equals(latestSelectedAccount.getId())))
+                        .toSortedList(Ordering.natural().onResultOf(Transaction::getPostDate))))
+        .subscribe(tableUiState::onNext);
 
-    Panel content = new Panel(new BorderLayout());
-    content.addComponent(accountList.get(), BorderLayout.Location.LEFT);
-    content.addComponent(transactions.get(), BorderLayout.Location.CENTER);
-    window.setComponent(content);
+    Observable.combineLatest(
+            accountList,
+            transactionTable,
+            (accountListComponent, transactionTableComponent) -> {
+              Panel contentPanel = new Panel(new BorderLayout());
+              accountListComponent.ifPresent(
+                  component -> contentPanel.addComponent(component, BorderLayout.Location.LEFT));
+              transactionTableComponent.ifPresent(
+                  component -> contentPanel.addComponent(component, BorderLayout.Location.CENTER));
+              return contentPanel;
+            })
+        .subscribe(window::setComponent);
+
     return window;
   }
 }
